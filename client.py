@@ -5,7 +5,7 @@ import numpy
 import time
 import sys
 import os
-from fps import FPS
+
 from config import Config
 from packer import Packer
 import logging
@@ -132,7 +132,6 @@ class WebVideoStream:
             # otherwise, read the next frame from the stream
             (grabbed, frame_raw) = self.stream.read()
 
-            # print(frame_raw.shape)
             now = int(time.time() * 1000)
             for i in range(self.packer.frame_pieces):
                 self.packer.pack_data(i, now, frame_raw, self.piece_array, self.piece_time, self.piece_fps)
