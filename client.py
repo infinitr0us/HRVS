@@ -19,8 +19,6 @@ logger = logging.getLogger(__name__)
 class WebVideoStream:
 
     def __init__(self, src="test.mp4"):
-        # 1080p D:\\kankan\\backup\\Automata.2014.1080p.BluRay.x264.YIFY.mp4
-        # 720p  C:\\Tools\\titan_test.mp4
         self.config = Config()
         self.packer = Packer()
         # initialize the file video stream along with the boolean
@@ -32,17 +30,6 @@ class WebVideoStream:
 
         self.stream.set(cv2.CAP_PROP_FRAME_WIDTH, self.packer.w)  # float
         self.stream.set(cv2.CAP_PROP_FRAME_HEIGHT, self.packer.h)  # float
-        # while True:
-        # 	if cv2.waitKey(1) & 0xFF == ord('q'):
-        # 		break
-        # 	ret, frame = self.stream.read()
-        # 	if ret:
-        # 		# print(frame.shape)
-        # 		frame = frame.reshape(self.packer.h, self.packer.w, self.packer.d)
-        # 		cv2.imshow('read video data.jpg', frame)
-        # self.stream.set(cv2.CAP_PROP_MODE, cv2.CAP_MODE_YUYV)
-        # print(self.stream.get(cv2.CAP_PROP_FPS)) # 默认帧率30
-        # self.stream.set(cv2.CAP_PROP_FPS, 20)   # cv version is 3.4.2
         self.stopped = False
 
         self.requesting = False
@@ -90,7 +77,7 @@ class WebVideoStream:
         self.address = (host, int(port))
         self.feed_address = (feed_host, int(feed_port))
 
-        # 初始化delay信息
+        # initialize delay info
         self.frame_delay = float(config.get("delay", "frame"))
         self.piece_delay = float(config.get("delay", "piece"))
 
