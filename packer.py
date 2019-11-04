@@ -14,21 +14,20 @@ logger = logging.getLogger(__name__)
 
 class Packer:
     """
-    专门用于数据打包
+    For Packer use
     """
 
     def __init__(self):
-        # 压缩参数，后面cv2.imencode将会用到，对于jpeg来说，15代表图像质量，越高代表图像质量越好为 0-100，默认95
+        # Compress parameter, Default=95
         self.encode_param = [int(cv2.IMWRITE_JPEG_QUALITY), 80]
         self.info_pack_len = 16
         self.init_config()
-        # 这里的队列，用于多线程压缩图片之后，放入队列
-        # Python的队列是线程安全的
-        # self.Q = Queue()
+        # images in queue
+        # Queue in Python is thread-safe
 
     def init_config(self):
         config = Config()
-        # 初始化相机信息
+        # initialize camera info
         self.w = w = int(config.get("camera", "w"))
         self.h = h = int(config.get("camera", "h"))
         self.d = d = int(config.get("camera", "d"))
@@ -36,19 +35,19 @@ class Packer:
         self.frame_size = w * h
         self.frame_size_3d = w * h * d
         self.piece_size = int(w * h * d / frame_pieces)
-        self.idx_frame = int(h / self.frame_pieces)  # 一块数据，在原始图像占多少行
+        self.idx_frame = int(h / self.frame_pieces)  # Lines of orginal image occupy
 
-        # 初始化打包头信息
+        # Initialize the package header information
         self.head_name = config.get("header", "name")
         self.head_data_len_len = int(config.get("header", "data"))
         self.head_index_len = int(config.get("header", "index"))
         self.head_time_len = int(config.get("header", "time"))
         self.img_len = int(config.get("header", "data_size"))
         self.pack_len = int(config.get("header", "total_size"))
-        # 当前的设计下，head_len=16
+        # Under the current coding,head_len=16
         self.head_len = len(self.head_name) + self.head_data_len_len + self.head_index_len + self.head_time_len
 
-        # 初始化队列大小信息
+        # Initialize queue size information
         self.queue_size = int(config.get("receive", "queue_size"))
         self.frame_limit = int(config.get("receive", "frame_limit"))
         self.piece_limit = int(config.get("receive", "piece_limit"))
@@ -80,10 +79,10 @@ class Packer:
 
     def compress(self, idx, create_time, frame_raw, piece_array, piece_time, piece_fps):
         if len(frame_raw) == 0: return
-        # 分片下标计算
+        # Slice subscript calculation
         row_start = idx * self.idx_frame
         row_end = (idx + 1) * self.idx_frame
-        # 视频分片压缩，idx对应当前分片的序号
+        # Video fragment compression, idx corresponds to the serial number of the current fragment
         try:
             result, imgencode = cv2.imencode('.jpg',
                                              frame_raw[row_start:row_end], self.encode_param)
@@ -95,7 +94,7 @@ class Packer:
             res = self.pack_header(data_len, idx, create_time)
             res += imgbytes
 
-            # 更新
+            # Update
             piece_array[idx] = res
             #
             if create_time - piece_time != 0:

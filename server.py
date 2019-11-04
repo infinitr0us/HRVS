@@ -59,9 +59,9 @@ class NetVideoStream:
         self.info_pack = None
 
     def init_config(self):
-        # 初始化大小信息
+        # Initialize size information
         config = self.config
-        # 初始化连接信息
+        # Initialize connection information
         host = config.get("server", "host")
         port = config.get("server", "port")
         feed_host = config.get("server", "feed_host")
@@ -69,13 +69,13 @@ class NetVideoStream:
         self.address = (host, int(port))
         self.feed_address = (feed_host, int(feed_port))
 
-        # 初始化打包头信息
+        # Initialize the package header information
         self.head_name = config.get("header", "name")
         self.head_data_len_len = int(config.get("header", "data"))
         self.head_index_len = int(config.get("header", "index"))
         self.head_time_len = int(config.get("header", "time"))
 
-        # 初始化队列大小信息
+        # Initialize queue size information
         self.queue_size = int(config.get("receive", "queue_size"))
 
     def init_connection(self):
@@ -285,7 +285,7 @@ class NetVideoStream:
 def ReceiveVideo():
     t = 0
     if t == 0:
-        NetVideoStream().read_show()  # 一次性使用
+        NetVideoStream().read_show()  # One-time use
     elif t == 1:
         con = Config()
         host = con.get("server", "host")
@@ -298,7 +298,7 @@ def ReceiveVideo():
         frame = numpy.zeros(bfsize * 20, dtype=numpy.uint8)
         cnt = 0
         while True:
-            # start = time.time()#用于计算帧率信息
+            # start = time.time() #Calculate frame rate information
             cnt += 1
             data, addr = sock.recvfrom(chuncksize)
             i = int.from_bytes(data[-1:], byteorder='big')
@@ -312,7 +312,6 @@ def ReceiveVideo():
                 break
     else:
         print("unex")
-        # 下面的不会执行
         nvs = NetVideoStream().start()
         frame = numpy.zeros(nvs.packer.frame_size_3d, dtype=numpy.uint8)
         cnt = 0

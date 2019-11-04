@@ -81,7 +81,7 @@ class WebVideoStream:
         self.frame_delay = float(config.get("delay", "frame"))
         self.piece_delay = float(config.get("delay", "piece"))
 
-        # 初始化队列大小信息
+        # Initialize queue size information
         self.queue_size = int(config.get("receive", "queue_size"))
 
     def init_connection(self):
@@ -126,7 +126,7 @@ class WebVideoStream:
         return
 
     def Q_flow_control(self):
-        if self.piece_fps == 0: return False  # 为零表示还没有变化
+        if self.piece_fps == 0: return False  # Zero means no change yet
         if self.piece_fps > self.packer.send_fps:
             self.push_sleep = min(self.push_sleep + 0.01, self.push_sleep_max)
             return True
@@ -257,17 +257,17 @@ def SendVideo():
         sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         capture = cv2.VideoCapture(0)
         capture.set(cv2.CAP_PROP_MODE, cv2.CAP_MODE_YUYV)
-        # 读取一帧图像，读取成功:ret=1 frame=读取到的一帧图像；读取失败:ret=0
+        # Read one frame of image, read successfully: ret=1 frame= one frame of image read; read failure: ret=0
         ret, frame = capture.read()
         encode_param = [int(cv2.IMWRITE_JPEG_QUALITY), 60]
 
         while True:
             if cv2.waitKey(1) & 0xFF == ord('q'):
                 break
-            # 停止0.1S 防止发送过快服务的处理不过来，如果服务端的处理很多，那么应该加大这个值
+            # Stopping 0.1S prevents the processing of sending too fast service. However, if the server handles a lot, you should increase this value.
             time.sleep(0.01)
             ret, frame = capture.read()
-            frame = cv2.flip(frame, 1)  # 水平翻转
+            frame = cv2.flip(frame, 1)  # horizontal flip
             result, imgencode = cv2.imencode('.jpg', frame, encode_param)
             print(len(imgencode))
             s = frame.flatten().tostring()
