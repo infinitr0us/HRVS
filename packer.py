@@ -1,29 +1,17 @@
 from threading import Thread
-import socket
-import time
 import cv2
-import numpy
 from config import Config
-import logging
-
-logging.basicConfig(level=logging.DEBUG,
-                    filename='output.log',
-                    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
-logger = logging.getLogger(__name__)
 
 
 class Packer:
-    """
-    For Packer use
-    """
+
 
     def __init__(self):
         # Compress parameter, Default=95
         self.encode_param = [int(cv2.IMWRITE_JPEG_QUALITY), 80]
         self.info_pack_len = 16
         self.init_config()
-        # images in queue
-        # Queue in Python is thread-safe
+
 
     def init_config(self):
         config = Config()
@@ -84,8 +72,7 @@ class Packer:
         row_end = (idx + 1) * self.idx_frame
         # Video fragment compression, idx corresponds to the serial number of the current fragment
         try:
-            result, imgencode = cv2.imencode('.jpg',
-                                             frame_raw[row_start:row_end], self.encode_param)
+            result, imgencode = cv2.imencode('.jpg',frame_raw[row_start:row_end], self.encode_param)
         except:
             return
         if result:

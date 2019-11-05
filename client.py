@@ -1,4 +1,4 @@
-from threading import Thread, Lock
+from threading import Thread
 import socket
 import cv2
 import numpy
@@ -8,12 +8,6 @@ import os
 
 from config import Config
 from packer import Packer
-import logging
-
-logging.basicConfig(level=logging.DEBUG,
-                    filename='output.log',
-                    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
-logger = logging.getLogger(__name__)
 
 
 class WebVideoStream:
@@ -69,7 +63,7 @@ class WebVideoStream:
 
     def init_config(self):
         config = self.config
-        # 初始化连接信息
+        # initialization
         host = config.get("server", "host")
         port = config.get("server", "port")
         feed_host = config.get("server", "feed_host")
@@ -114,7 +108,6 @@ class WebVideoStream:
             if self.stopped:
                 return
 
-            # self.Q_flow_control()
             time.sleep(self.push_sleep)
             # otherwise, read the next frame from the stream
             (grabbed, frame_raw) = self.stream.read()
@@ -214,7 +207,6 @@ def SendVideo():
                 continue
 
             now = time.time()
-            # camara_delay = 0.03
             wvs.send_flow_control()
             time.sleep(wvs.send_sleep)
             for i in range(wvs.packer.frame_pieces):
@@ -222,14 +214,12 @@ def SendVideo():
             now1 = time.time()
             cnow = int(now1 * 1000)
             ctime = now1 - now
-            # print("frame time", ctime)
             if ctime > 0:
                 send_fps = str(int(1.0 / ctime)).ljust(4)
                 recv_fps = str(wvs.recv_fps).ljust(4)
                 net_delay = str(wvs.network_delay).ljust(4)
 
                 if cnow - wvs.delay_timer > 300:
-                    # if True:
                     wvs.delay_timer = cnow
 
                     img = numpy.zeros((80, 700, 3), numpy.uint8)
@@ -274,12 +264,10 @@ def SendVideo():
 
             for i in range(20):
                 time.sleep(0.001)
-                # print(i.to_bytes(1, byteorder='big'))
                 sock.sendto(s[i * 46080:(i + 1) * 46080] + i.to_bytes(1, byteorder='big'), address)
 
 
     exit(0)
-
 
 
 

@@ -1,5 +1,5 @@
-from threading import Thread, Lock
-from queue import Queue, PriorityQueue
+from threading import Thread
+from queue import Queue
 import socket
 import time
 import cv2
@@ -7,12 +7,6 @@ import numpy
 import sys
 from config import Config
 from packer import Packer
-import logging
-
-logging.basicConfig(level=logging.DEBUG,
-                    filename='output.log',
-                    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
-logger = logging.getLogger(__name__)
 
 
 class PiecePack(object):
@@ -121,12 +115,11 @@ class NetVideoStream:
 
     def rebuild_thread(self, idx):
         while True:
-            # 流量控制
+            # flow control
             if self.Q.qsize() > self.packer.piece_limit:
                 self.Q = Queue()
                 if self.Q.mutex:
                     self.Q.queue.clear()
-            # 不断地从队列里面取数据尝试
             try:
                 avg_time = 0
                 pack = self.Q.get()
@@ -144,7 +137,6 @@ class NetVideoStream:
                     if self.Q.qsize() == 0:
                         break
                     pack = self.Q.get()
-                    # pack_num += 1
                     loop -= 1
                 self.img_Q.put(self.frame.reshape(self.packer.h, self.packer.w, self.packer.d))
                 ctime = int(time.time() * 1000)
@@ -201,7 +193,7 @@ class NetVideoStream:
             if self.Q.mutex:
                 self.Q.queue.clear()
         return frame
-        # 流量控制(这里可以用个算法,时间限制就写简单点)
+        # Flow control
         now = int(time.time() * 1000)
         if self.Q.qsize() == 0:
             return None
@@ -211,7 +203,6 @@ class NetVideoStream:
             ctime = frame.ctime
             # select only when frametime is later than previous frame
             if ctime >= self.last_frame_time:
-                # print("time-delay:",now - ctime," ms")
                 self.last_frame_time = ctime
                 break
 
@@ -225,7 +216,7 @@ class NetVideoStream:
         if self.img_Q.qsize() == 0:
             return None
         frame = self.img_Q.get()
-        # 接收端流量控制
+        # flow control
         if self.img_Q.qsize() > self.packer.frame_limit:  # self.queue_size*0.1
             self.img_Q = Queue()
             if self.img_Q.mutex:
@@ -244,7 +235,7 @@ class NetVideoStream:
             frame = self.read_img()
             if frame is not None:
 
-                # 更新和显示fps
+                # fps showing
                 cnow = int(time.time() * 1000)
                 if now - last_frame_time > 0:
                     nvs.receive_fps = int(1.0 / (now - last_frame_time))
@@ -253,14 +244,9 @@ class NetVideoStream:
                     tshow = nvs.time_delay
                     fshow = nvs.receive_fps
 
-                # 记录上一帧时间
+                # record time of last frame
                 last_frame_time = time.time()
 
-                #font = cv2.FONT_HERSHEY_SIMPLEX
-                #bottomLeftCornerOfText = (10, 50)
-                #fontScale = 1
-                #fontColor = (0, 0, 255)
-                #lineType = 2
                 cv2.imshow("Receive server", frame)
 
     def running(self):
@@ -324,7 +310,6 @@ def ReceiveVideo():
                 row_start = idx * nvs.packer.piece_size
                 row_end = (idx + 1) * nvs.packer.piece_size
                 frame[row_start:row_end] = data
-                # print(data)
                 if cnt == nvs.packer.frame_pieces:
                     cv2.imshow("FireStreamer", frame.reshape(nvs.packer.h, nvs.packer.w, nvs.packer.d))
                     cnt = 0
