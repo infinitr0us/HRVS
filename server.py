@@ -1,15 +1,16 @@
-from threading import Thread
-from queue import Queue
 import socket
 import time
 import cv2
 import numpy
 import sys
+
+from threading import Thread
+from queue import Queue
 from config import Config
 from packer import Packer
 
 
-class PiecePack(object):
+class Piece(object):
     def __init__(self, idx, ctime, frame):
         self.idx = idx
         self.ctime = ctime
@@ -19,19 +20,13 @@ class PiecePack(object):
         return self.ctime > other.ctime
 
 
-class FramePack(object):
-    def __init__(self, ctime, frame):
-        self.ctime = ctime
-        self.frame = frame
-
-
-class NetVideoStream:
+class VideoStreamHR:
     def __init__(self, queue_size=128):
         self.stopped = False
 
         self.config = Config()
         self.packer = Packer()
-        self.init_config()
+        self.initConfig()
         # self.Q = PriorityQueue(maxsize=self.queue_size)
         self.Q = Queue(maxsize=self.queue_size)
         self.img_Q = Queue(maxsize=self.queue_size)
@@ -52,36 +47,27 @@ class NetVideoStream:
         self.receive_fps = 0
         self.info_pack = None
 
-    def init_config(self):
+    def initConfig(self):
         # Initialize size information
         config = self.config
         # Initialize connection information
-        host = config.get("server", "host")
-        port = config.get("server", "port")
-        feed_host = config.get("server", "feed_host")
-        feed_port = config.get("server", "feed_port")
+        host = config.getConfig("server", "host")
+        port = config.getConfig("server", "port")
+        feed_host = config.getConfig("server", "feed_host")
+        feed_port = config.getConfig("server", "feed_port")
         self.address = (host, int(port))
         self.feed_address = (feed_host, int(feed_port))
 
         # Initialize the package header information
-        self.head_name = config.get("header", "name")
-        self.head_data_len_len = int(config.get("header", "data"))
-        self.head_index_len = int(config.get("header", "index"))
-        self.head_time_len = int(config.get("header", "time"))
+        self.head_name = config.getConfig("header", "name")
+        self.head_data_len_len = int(config.getConfig("header", "data"))
+        self.head_index_len = int(config.getConfig("header", "index"))
+        self.head_time_len = int(config.getConfig("header", "time"))
 
         # Initialize queue size information
-        self.queue_size = int(config.get("receive", "queue_size"))
+        self.queue_size = int(config.getConfig("receive", "queue_size"))
 
-    def init_connection(self):
-        try:
-            self.sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-            self.sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-            self.sock.bind(self.address)
-        except socket.error as msg:
-            print(msg)
-            sys.exit(1)
-
-    def init_connection_sock(self):
+    def initConnectionSock(self):
         try:
             sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
             sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
@@ -91,29 +77,82 @@ class NetVideoStream:
             print(msg)
             sys.exit(1)
 
-    def close_connection(self):
+    def initConnection(self):
+        try:
+            self.sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+            self.sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+            self.sock.bind(self.address)
+        except socket.error as msg:
+            print(msg)
+            sys.exit(1)
+
+    def closeConnection(self):
         self.sock.close()
 
     def start(self):
         # start threads to recieve
         for i in range(self.packer.frame_pieces - 8):
             # intialize thread
-            thread = Thread(target=self.recv_thread, args=(i,))
+            thread = Thread(target=self.recvThread, args=(i,))
             thread.daemon = True
 
             thread.start()
 
-        decode_thread = Thread(target=self.rebuild_thread, args=(i,))
+        decode_thread = Thread(target=self.rebuildThread, args=(i,))
         decode_thread.daemon = True
         decode_thread.start()
 
-        send_thread = Thread(target=self.send_thread, args=())
+        send_thread = Thread(target=self.sendThread, args=())
         send_thread.daemon = True
         send_thread.start()
 
         return self
 
-    def rebuild_thread(self, idx):
+    def stop(self):
+        # indicate that the thread should be stopped
+        self.stopped = True
+        # wait until stream resources are released (producer thread might be still grabbing frame)
+        self.thread.join()
+
+    def sendThread(self):
+        print("Try to connect...")
+        s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        s.connect(self.feed_address)
+        print("Connection Established Successful!")
+        last_send = int(time.time() * 1000)
+        while True:
+            if self.info_pack is None: continue
+            cnow = int(time.time() * 1000)
+            if cnow - last_send > 500:
+                s.sendall(self.info_pack)
+                last_send = int(time.time() * 1000)
+            pass
+        s.close()
+        return
+
+    def recvThread(self, thread_idx):
+        sock = self.initConnectionSock()
+
+        stopped = False
+        while True:
+            if stopped: break
+            # otherwise, ensure the queue has room in it
+            if not self.Q.full():
+                try:
+                    data, addr = sock.recvfrom(self.packer.pack_len)
+                    idx, ctime, raw_img = self.packer.unpackData(data)
+
+                    line_data = numpy.frombuffer(raw_img, dtype=numpy.uint8)
+                    line_data = cv2.imdecode(line_data, 1).flatten()
+                    # add the frame to the queue
+                    self.Q.put(Piece(idx, ctime, line_data))
+
+                except:
+                    pass
+            else:
+                time.sleep(0.01)  # Rest for 10ms, we have a full queue
+
+    def rebuildThread(self, idx):
         while True:
             # flow control
             if self.Q.qsize() > self.packer.piece_limit:
@@ -142,48 +181,13 @@ class NetVideoStream:
                 ctime = int(time.time() * 1000)
                 self.time_delay = ctime - ptime
 
-                self.info_pack = self.packer.pack_info_data(self.receive_fps, ptime)
+                self.info_pack = self.packer.packInfoData(self.receive_fps, ptime)
             except:
                 pass
         return
 
-    def send_thread(self):
-        print("try")
-        s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        s.connect(self.feed_address)
-        print("establish")
-        last_send = int(time.time() * 1000)
-        while True:
-            if self.info_pack is None: continue
-            cnow = int(time.time() * 1000)
-            if cnow - last_send > 500:
-                s.sendall(self.info_pack)
-                last_send = int(time.time() * 1000)
-            pass
-        s.close()
-        return
-
-    def recv_thread(self, thread_idx):
-        sock = self.init_connection_sock()
-
-        stopped = False
-        while True:
-            if stopped: break
-            # otherwise, ensure the queue has room in it
-            if not self.Q.full():
-                try:
-                    data, addr = sock.recvfrom(self.packer.pack_len)
-                    idx, ctime, raw_img = self.packer.unpack_data(data)
-
-                    line_data = numpy.frombuffer(raw_img, dtype=numpy.uint8)
-                    line_data = cv2.imdecode(line_data, 1).flatten()
-                    # add the frame to the queue
-                    self.Q.put(PiecePack(idx, ctime, line_data))
-
-                except:
-                    pass
-            else:
-                time.sleep(0.01)  # Rest for 10ms, we have a full queue
+    def running(self):
+        return self.more() or not self.stopped
 
     def read(self):
         frame = self.Q.get()
@@ -212,7 +216,7 @@ class NetVideoStream:
                 self.Q.queue.clear()
         return frame
 
-    def read_img(self):
+    def readImg(self):
         if self.img_Q.qsize() == 0:
             return None
         frame = self.img_Q.get()
@@ -223,7 +227,7 @@ class NetVideoStream:
                 self.img_Q.queue.clear()
         return frame
 
-    def read_show(self):
+    def readShow(self):
         nvs = self.start()
         last_frame_time = time.time()
         tshow, fshow = 0, 0
@@ -232,7 +236,7 @@ class NetVideoStream:
                 break
 
             now = time.time()
-            frame = self.read_img()
+            frame = self.readImg()
             if frame is not None:
 
                 # fps showing
@@ -249,9 +253,6 @@ class NetVideoStream:
 
                 cv2.imshow("Receive server", frame)
 
-    def running(self):
-        return self.more() or not self.stopped
-
     def more(self):
         # return True if there are still frames in the queue. If stream is not stopped, try to wait a moment
         tries = 0
@@ -261,21 +262,15 @@ class NetVideoStream:
 
         return self.Q.qsize() > 0
 
-    def stop(self):
-        # indicate that the thread should be stopped
-        self.stopped = True
-        # wait until stream resources are released (producer thread might be still grabbing frame)
-        self.thread.join()
 
-
-def ReceiveVideo():
+def ReceiveServer():
     t = 0
     if t == 0:
-        NetVideoStream().read_show()  # One-time use
+        VideoStreamHR().readShow()  # One-time use
     elif t == 1:
         con = Config()
-        host = con.get("server", "host")
-        port = con.get("server", "port")
+        host = con.getConfig("server", "host")
+        port = con.getConfig("server", "port")
         address = (host, int(port))
         sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         sock.bind(address)
@@ -284,7 +279,6 @@ def ReceiveVideo():
         frame = numpy.zeros(bfsize * 20, dtype=numpy.uint8)
         cnt = 0
         while True:
-            # start = time.time() #Calculate frame rate information
             cnt += 1
             data, addr = sock.recvfrom(chuncksize)
             i = int.from_bytes(data[-1:], byteorder='big')
@@ -297,8 +291,8 @@ def ReceiveVideo():
             if cv2.waitKey(1) & 0xFF == ord('q'):
                 break
     else:
-        print("unex")
-        nvs = NetVideoStream().start()
+        print("Unex")
+        nvs = VideoStreamHR().start()
         frame = numpy.zeros(nvs.packer.frame_size_3d, dtype=numpy.uint8)
         cnt = 0
         while nvs.more():
@@ -317,9 +311,9 @@ def ReceiveVideo():
 
             if cv2.waitKey(1) & 0xFF == ord('q'):
                 break
-    print("The server is quitting. ")
+    print("Server is quitting! ")
     cv2.destroyAllWindows()
 
 
 if __name__ == '__main__':
-    ReceiveVideo()
+    ReceiveServer()

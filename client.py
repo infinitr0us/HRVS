@@ -1,4 +1,3 @@
-from threading import Thread
 import socket
 import cv2
 import numpy
@@ -6,11 +5,12 @@ import time
 import sys
 import os
 
+from threading import Thread
 from config import Config
 from packer import Packer
 
 
-class WebVideoStream:
+class HRVideoStream:
 
     def __init__(self, src="test.mp4"):
         self.config = Config()
@@ -54,31 +54,31 @@ class WebVideoStream:
         self.frame_size = 0
         self.piece_size = 0
         self.frame_pieces = 0
-        self.init_config()
-        self.init_connection()
+        self.initConfig()
+        self.initConnection()
 
         # intialize thread and lock
         self.thread = Thread(target=self.update, args=())
         self.thread.daemon = True
 
-    def init_config(self):
+    def initConfig(self):
         config = self.config
         # initialization
-        host = config.get("server", "host")
-        port = config.get("server", "port")
-        feed_host = config.get("server", "feed_host")
-        feed_port = config.get("server", "feed_port")
+        host = config.getConfig("server", "host")
+        port = config.getConfig("server", "port")
+        feed_host = config.getConfig("server", "feed_host")
+        feed_port = config.getConfig("server", "feed_port")
         self.address = (host, int(port))
         self.feed_address = (feed_host, int(feed_port))
 
         # initialize delay info
-        self.frame_delay = float(config.get("delay", "frame"))
-        self.piece_delay = float(config.get("delay", "piece"))
+        self.frame_delay = float(config.getConfig("delay", "frame"))
+        self.piece_delay = float(config.getConfig("delay", "piece"))
 
         # Initialize queue size information
-        self.queue_size = int(config.get("receive", "queue_size"))
+        self.queue_size = int(config.getConfig("receive", "queue_size"))
 
-    def init_connection(self):
+    def initConnection(self):
         try:
             self.sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
             self.sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
@@ -87,18 +87,87 @@ class WebVideoStream:
             print(msg)
             sys.exit(1)
 
-    def close_connection(self):
+    def closeConnection(self):
         self.sock.close()
+
+    def QFlowControl(self):
+        if self.piece_fps == 0: return False  # Zero means no change yet
+        if self.piece_fps > self.packer.send_fps:
+            self.push_sleep = min(self.push_sleep + 0.01, self.push_sleep_max)
+            return True
+        if self.piece_fps < self.packer.send_fps:
+            self.push_sleep = max(self.push_sleep - 0.01, self.push_sleep_min)
+        return False
+
+    def sendFlowControl(self):
+        if self.recv_fps == 0: return False
+        if self.recv_fps > self.packer.recv_fps_limit:
+            self.send_sleep = min(self.send_sleep + 0.01, self.send_sleep_max)
+            return True
+        if self.recv_fps < self.packer.recv_fps_limit:
+            self.send_sleep = max(self.send_sleep - 0.01, self.send_sleep_min)
+        return False
 
     def start(self):
         # start a thread to read frames from the file video stream
         self.thread.start()
 
-        recv_thread = Thread(target=self.recv_thread, args=())
+        recv_thread = Thread(target=self.recvThread, args=())
         recv_thread.daemon = True
         recv_thread.start()
 
         return self
+
+    def getRequest(self):
+        if self.requesting: return
+
+        print("waiting...")
+        thread = Thread(target=self.getRequestThread, args=())
+        thread.daemon = True
+        thread.start()
+        self.requesting = True
+
+    def getRequestThread(self):
+        while True:
+            data = b''
+            try:
+                data, address = self.sock.recvfrom(4)
+            except:
+                pass
+            if (data == b"getConfig"):
+                self.request = True
+                break
+            elif (data == b"quit"):
+                self.quit = True
+                break
+
+    def read(self, i):
+        return self.piece_array[i]
+
+    def readSend(self, i):
+
+        pack = self.piece_array[i]
+        if pack is None: return
+        self.sock.sendto(pack, self.address)
+
+    def sendThread(self, i):
+        pack = self.piece_array[i]
+        if pack is None: return
+        self.sock.sendto(pack, self.address)
+
+    def recvThread(self):
+        s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        s.bind(self.feed_address)
+        s.listen(1)
+        conn, addr = s.accept()
+        while True:
+            data = conn.recv(self.packer.info_pack_len)
+            if len(data) > 0:
+                sname, server_fps, send_ctime = self.packer.unpackInfoData(data)
+                now = int(time.time() * 1000)
+                self.network_delay = int((now - send_ctime) / 2.0)
+                self.recv_fps = server_fps
+        conn.close()
 
     def update(self):
         piece_size = self.packer.piece_size
@@ -114,89 +183,19 @@ class WebVideoStream:
 
             now = int(time.time() * 1000)
             for i in range(self.packer.frame_pieces):
-                self.packer.pack_data(i, now, frame_raw, self.piece_array, self.piece_time, self.piece_fps)
+                self.packer.packData(i, now, frame_raw, self.piece_array, self.piece_time, self.piece_fps)
 
         return
-
-    def Q_flow_control(self):
-        if self.piece_fps == 0: return False  # Zero means no change yet
-        if self.piece_fps > self.packer.send_fps:
-            self.push_sleep = min(self.push_sleep + 0.01, self.push_sleep_max)
-            return True
-        if self.piece_fps < self.packer.send_fps:
-            self.push_sleep = max(self.push_sleep - 0.01, self.push_sleep_min)
-        return False
-
-    def send_flow_control(self):
-        if self.recv_fps == 0: return False
-        if self.recv_fps > self.packer.recv_fps_limit:
-            self.send_sleep = min(self.send_sleep + 0.01, self.send_sleep_max)
-            return True
-        if self.recv_fps < self.packer.recv_fps_limit:
-            self.send_sleep = max(self.send_sleep - 0.01, self.send_sleep_min)
-        return False
-
-    def get_request(self):
-        if self.requesting: return
-
-        print("waiting...")
-        thread = Thread(target=self.get_request_thread, args=())
-        thread.daemon = True
-        thread.start()
-        self.requesting = True
-
-    def get_request_thread(self):
-        while True:
-            data = b''
-            try:
-                data, address = self.sock.recvfrom(4)
-            except:
-                pass
-            if (data == b"get"):
-                self.request = True
-                break
-            elif (data == b"quit"):
-                self.quit = True
-                break
-
-    def read(self, i):
-        return self.piece_array[i]
-
-    def read_send(self, i):
-
-        pack = self.piece_array[i]
-        if pack is None: return
-        self.sock.sendto(pack, self.address)
-
-
-    def send_thread(self, i):
-        pack = self.piece_array[i]
-        if pack is None: return
-        self.sock.sendto(pack, self.address)
-
-    def recv_thread(self):
-        s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        s.bind(self.feed_address)
-        s.listen(1)
-        conn, addr = s.accept()
-        while True:
-            data = conn.recv(self.packer.info_pack_len)
-            if len(data) > 0:
-                sname, server_fps, send_ctime = self.packer.unpack_info_data(data)
-                now = int(time.time() * 1000)
-                self.network_delay = int((now - send_ctime) / 2.0)
-                self.recv_fps = server_fps
-        conn.close()
 
     def stop(self):
         # indicate that the thread should be stopped
         self.stopped = True
 
 
-def SendVideo():
+def SendClient():
     t = 0
     if t == 0:
-        wvs = WebVideoStream().start()
+        wvs = HRVideoStream().start()
         sock = wvs.sock
         address = wvs.address
 
@@ -207,10 +206,10 @@ def SendVideo():
                 continue
 
             now = time.time()
-            wvs.send_flow_control()
+            wvs.sendFlowControl()
             time.sleep(wvs.send_sleep)
             for i in range(wvs.packer.frame_pieces):
-                wvs.read_send(i)
+                wvs.readSend(i)
             now1 = time.time()
             cnow = int(now1 * 1000)
             ctime = now1 - now
@@ -237,12 +236,10 @@ def SendVideo():
                                 lineType)
                     cv2.imshow("Send Client", img)
 
-
-
     else:
         con = Config()
-        host = con.get("server", "host")
-        port = con.get("server", "port")
+        host = con.getConfig("server", "host")
+        port = con.getConfig("server", "port")
         address = (host, int(port))
         sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         capture = cv2.VideoCapture(0)
@@ -266,10 +263,9 @@ def SendVideo():
                 time.sleep(0.001)
                 sock.sendto(s[i * 46080:(i + 1) * 46080] + i.to_bytes(1, byteorder='big'), address)
 
-
     exit(0)
 
 
 
 if __name__ == '__main__':
-    SendVideo()
+    SendClient()
