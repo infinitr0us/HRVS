@@ -2,9 +2,9 @@
 V1
 1. Background
 High-resolution real-time video transmission based on UDP protocol: Play video or capture the camera image from one computer to another computer in the same LAN. Try to make the video as high as possible while ensuring the highest possible resolution. Caton.
-  1.1 Transfer video
+  1. Transfer video
 The transmission video can take the form of a picture or a stream, and the project takes the form of transmitting pictures, and displays multiple pictures within 1 s through the visual persistence effect to form a continuous video picture.
-  1.2 Test resources:
+  2. Test resources:
 Laptop's  camera (720p)
 "007: Spectra" (Bluray@720p)
 Alien: Contract (Bluray@1080p).
