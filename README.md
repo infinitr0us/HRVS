@@ -1,5 +1,13 @@
 # HRVS
 Version 2.0
+## USAGE
+1. client.py and server.py are the two main files for sender and receiver (py3 compatible).  
+2. Check the address and port configuraion in config.conf before running.  
+3. Run it as follows  
+```
+python server.py 
+python client.py
+```
 ## 1. Background
 High-resolution real-time video transmission based on UDP protocol: Play video or capture the camera image from one computer to another computer in the same LAN. Try to make the video as high as possible while ensuring the highest possible resolution. Caton.
 ### 1.1 Transfer video
@@ -7,7 +15,7 @@ The transmission video can take the form of a picture or a stream, and the proje
 ### 1.2 Test resources:
 Laptop's  camera (720p)  
 "007: Spectra" (Bluray@720p)  
-Alien: Contract (Bluray@1080p).
+"Alien: Contract" (Bluray@1080p).
 
 ## 2. Function realization
 ### 2.1 TCP/IP protocol
