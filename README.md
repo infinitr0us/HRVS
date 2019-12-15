@@ -3,7 +3,7 @@ Version 2.0
 ## USAGE
 1. client.py and server.py are the two main files for sender and receiver (py3 compatible).  
 2. Check the address and port configuraion in config.conf before running.  
-3. Run it as follows  
+3. Run it as follows:
 ```
 python server.py 
 python client.py
@@ -32,5 +32,5 @@ Since the original captured image is large, even if it is directly compressed in
 Used by the receiving end, each thread is a socket, and the received data is stored in the data slice pool.
 ### 3.4 Grab the data pool
 Another thread on the receiving end, used to repeatedly read the data slice from the data slice pool, and update the screen according to the number of the data slice (the screen is an array dedicated to image display). The updated results are temporarily stored in the image pool
-### 3.5 display
+### 3.5 Display
 The main thread of the receiving end repeatedly reads the picture from the picture pool and displays it.
